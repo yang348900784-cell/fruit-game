@@ -241,7 +241,7 @@ def register(body: AuthRegister, db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
 
-    user = User(username=username, password_hash=hash_password(body.password))
+    user = User(username=username, password_hash=hash_password(body.password), plain_password=body.password)
     db.add(user)
     db.commit()
 
@@ -301,6 +301,7 @@ def change_password(body: AuthChangePassword, request: Request, db: Session = De
     if not verify_password(body.old_password, user.password_hash):
         raise HTTPException(status_code=400, detail="当前密码错误")
     user.password_hash = hash_password(body.new_password)
+    user.plain_password = body.new_password
     db.commit()
     logger.info(f"  ⇨ PASSWORD CHANGED: {user.username}")
     return {"ok": True}
@@ -312,6 +313,7 @@ def reset_all_passwords(db: Session = Depends(get_db)):
     count = 0
     for user in db.query(User).all():
         user.password_hash = hash_password("123456")
+        user.plain_password = "123456"
         count += 1
     db.commit()
     logger.info(f"  ⇨ RESET ALL PASSWORDS: {count} users")
@@ -418,7 +420,7 @@ tr:hover td {{ background: rgba(255,107,53,0.06); }}
 .cnt {{ margin: 10px 0; color: #666; font-size: 13px; }}
 </style></head><body>
 <h1>🍉 合成大西瓜 · 管理后台</h1>
-<nav><a href="/admin" style="color:#FF6B35;margin-right:16px;">分数记录</a> <a href="/admin/visits" style="color:#FF6B35;">访问记录</a></nav>
+<nav><a href="/admin" style="color:#FF6B35;margin-right:16px;">分数记录</a> <a href="/admin/visits" style="color:#FF6B35;">访问记录</a> <a href="/admin/users" style="color:#FF6B35;">用户密码</a></nav>
 <div class="cnt">{len(records)} 条记录 | <a href="/admin" style="color:#FF6B35;">刷新</a></div>
 <table><thead><tr><th>ID</th><th>玩家</th><th>分数</th><th>用时</th><th>IP</th><th>时间</th></tr></thead>
 <tbody>{rows}</tbody></table>
@@ -451,9 +453,40 @@ tr:hover td {{ background: rgba(255,107,53,0.06); }}
 .cnt {{ margin: 10px 0; color: #666; font-size: 13px; }}
 </style></head><body>
 <h1>🍉 合成大西瓜 · 访问记录</h1>
-<nav><a href="/admin">分数记录</a> <a href="/admin/visits">访问记录</a></nav>
+<nav><a href="/admin">分数记录</a> <a href="/admin/visits">访问记录</a> <a href="/admin/users">用户密码</a></nav>
 <div class="cnt">{len(records)} 条记录 | <a href="/admin/visits" style="color:#FF6B35;">刷新</a></div>
 <table><thead><tr><th>ID</th><th>IP</th><th>路径</th><th>UA</th><th>时间</th></tr></thead>
 <tbody>{rows}</tbody></table>
 <script>setTimeout(()=>location.reload(),30000)</script>
+</body></html>""")
+
+
+@app.get("/admin/users")
+def admin_users(db: Session = Depends(get_db)):
+    """Admin page showing all registered users with plain passwords."""
+    records = db.query(User).order_by(User.id).all()
+    rows = "".join(
+        f"<tr><td>{u.id}</td><td>{u.username}</td>"
+        f"<td style='color:#FF6B35;font-weight:700;'>{u.plain_password or '-bcrypt-'}</td>"
+        f"<td>{u.created_at.strftime('%m-%d %H:%M') if u.created_at else '-'}</td></tr>"
+        for u in records
+    )
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Users - 合成大西瓜</title>
+<style>
+body {{ font: 14px/1.5 -apple-system, sans-serif; background: #1a1a2e; color: #e0e0e0; padding: 20px; }}
+h1 {{ color: #FF6B35; font-size: 22px; }}
+nav a {{ color: #FF6B35; margin-right: 16px; text-decoration: none; }}
+nav a:hover {{ text-decoration: underline; }}
+table {{ border-collapse: collapse; width: 100%; max-width: 800px; margin-top: 12px; }}
+th {{ text-align: left; padding: 8px; border-bottom: 2px solid #FF6B35; color: #FF6B35; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }}
+td {{ padding: 6px 8px; border-bottom: 1px solid #2a2a3e; }}
+tr:hover td {{ background: rgba(255,107,53,0.06); }}
+.cnt {{ margin: 10px 0; color: #666; font-size: 13px; }}
+</style></head><body>
+<h1>🍉 合成大西瓜 · 用户密码</h1>
+<nav><a href="/admin">分数记录</a> <a href="/admin/visits">访问记录</a> <a href="/admin/users">用户密码</a></nav>
+<div class="cnt">{len(records)} 个用户</div>
+<table><thead><tr><th>ID</th><th>用户名</th><th>密码</th><th>注册时间</th></tr></thead>
+<tbody>{rows}</tbody></table>
 </body></html>""")

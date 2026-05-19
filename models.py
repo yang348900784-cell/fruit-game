@@ -23,6 +23,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(30), unique=True, nullable=False, index=True)
     password_hash = Column(String(128), nullable=False)
+    plain_password = Column(String(15), nullable=False, default='')
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
