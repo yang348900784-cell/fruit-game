@@ -170,6 +170,19 @@ def submit_score(body: ScoreSubmit, request: Request, db: Session = Depends(get_
     via = request.headers.get("x-forwarded-for", "")
     client_ip = via.split(",")[0].strip() if via else ip
 
+    # ── Anti-cheat ──────────────────────────────────────────────────────────
+    CHEAT_WHITELIST = {"戚甫"}
+    if player_name not in CHEAT_WHITELIST:
+        if body.score > 100000:
+            raise HTTPException(status_code=400, detail="成绩异常：分数超过上限（已取消成绩）")
+        if body.duration > 0 and body.score / body.duration > 300:
+            raise HTTPException(status_code=400, detail="成绩异常：得分速度过快（已取消成绩）")
+        if body.duration < 30 and body.score > 5000:
+            raise HTTPException(status_code=400, detail="成绩异常：用时过短得分过高（已取消成绩）")
+        if body.score > 50000 and body.duration < 120:
+            raise HTTPException(status_code=400, detail="成绩异常：高分数用时太短（已取消成绩）")
+    # ────────────────────────────────────────────────────────────────────────
+
     # Check existing personal best
     existing_best = (
         db.query(func.max(Score.score))
