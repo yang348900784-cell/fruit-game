@@ -241,7 +241,7 @@ def register(body: AuthRegister, db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
 
-    user = User(username=username, password_hash=hash_password(body.password), plain_password=body.password)
+    user = User(username=username, password_hash=hash_password(body.password), plain_password=body.password, is_admin=0)
     db.add(user)
     db.commit()
 
@@ -390,6 +390,94 @@ def get_player_best(
     }
 
 
+# ─── Admin Auth ────────────────────────────────────────────────────────────
+
+from fastapi.responses import RedirectResponse
+
+
+@app.get("/admin/login", response_class=HTMLResponse)
+def admin_login_page(request: Request, error: str = ""):
+    """Admin login page."""
+    token = request.cookies.get("admin_token")
+    if token:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            if payload.get("role") == "admin":
+                return RedirectResponse(url="/admin")
+        except JWTError:
+            pass
+    err_div = '<div class="error">用户名或密码错误</div>' if error else ''
+    return HTMLResponse('''<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Admin Login</title>
+<style>
+body{font:14px/1.5 -apple-system,sans-serif;background:#1a1a2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+.card{background:#16213e;padding:40px;border-radius:16px;width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.3)}
+h1{color:#FF6B35;font-size:24px;text-align:center;margin-bottom:8px}
+p{color:#888;text-align:center;font-size:14px;margin-bottom:24px}
+input{width:100%;padding:12px;margin-bottom:12px;border:1px solid #2a2a3e;border-radius:8px;background:#1a1a2e;color:#e0e0e0;font-size:14px;box-sizing:border-box}
+input:focus{outline:none;border-color:#FF6B35}
+.btn{width:100%;padding:12px;background:#FF6B35;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer}
+.btn:hover{background:#e85a2a}
+.error{color:#ff4444;font-size:13px;text-align:center;margin-top:8px}
+</style></head><body>
+<div class="card">
+<h1>管理后台</h1>
+<p>请输入管理员账号密码</p>
+<form action="/api/admin/login" method="POST">
+<input type="text" name="username" placeholder="用户名" required>
+<input type="password" name="password" placeholder="密码" required>
+<button class="btn" type="submit">登录</button>
+</form>''' + err_div + '''
+</div>
+</body></html>''')
+
+
+@app.post("/api/admin/login")
+def admin_login_api(request: Request, db: Session = Depends(get_db)):
+    """Validate admin credentials and set JWT cookie."""
+    from urllib.parse import parse_qs
+    import asyncio
+    data = asyncio.run(request.body())
+    params = parse_qs(data.decode())
+    username = params.get("username", [""])[0].strip()
+    password = params.get("password", [""])[0]
+
+    user = db.query(User).filter(User.username == username).first()
+    if not user or not user.is_admin or not verify_password(password, user.password_hash):
+        return RedirectResponse(url="/admin/login?error=1", status_code=303)
+
+    token = jwt.encode({"sub": username, "role": "admin", "exp": datetime.utcnow() + timedelta(hours=8)}, SECRET_KEY, algorithm=ALGORITHM)
+    resp = RedirectResponse(url="/admin", status_code=303)
+    resp.set_cookie(key="admin_token", value=token, max_age=28800, httponly=True, path="/")
+    return resp
+
+
+@app.middleware("http")
+async def admin_auth_middleware(request: Request, call_next):
+    """Protect /admin/* routes behind admin login."""
+    path = request.url.path
+    if path.startswith("/admin") and path not in ("/admin/login", "/api/admin/login"):
+        token = request.cookies.get("admin_token")
+        authed = False
+        if token:
+            try:
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                authed = payload.get("role") == "admin"
+            except JWTError:
+                pass
+        if not authed:
+            return RedirectResponse(url="/admin/login")
+    return await call_next(request)
+
+
+@app.get("/admin/logout")
+def admin_logout():
+    """Clear admin cookie and redirect to login."""
+    resp = RedirectResponse(url="/admin/login")
+    resp.delete_cookie(key="admin_token", path="/")
+    return resp
+
+
 # ─── Pages ─────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -420,7 +508,7 @@ tr:hover td {{ background: rgba(255,107,53,0.06); }}
 .cnt {{ margin: 10px 0; color: #666; font-size: 13px; }}
 </style></head><body>
 <h1>🍉 合成大西瓜 · 管理后台</h1>
-<nav><a href="/admin" style="color:#FF6B35;margin-right:16px;">分数记录</a> <a href="/admin/visits" style="color:#FF6B35;">访问记录</a> <a href="/admin/users" style="color:#FF6B35;">用户密码</a></nav>
+<nav><a href="/admin" style="color:#FF6B35;margin-right:16px;">分数记录</a> <a href="/admin/visits" style="color:#FF6B35;">访问记录</a> <a href="/admin/users" style="color:#FF6B35;">用户密码</a> <a href="/admin/logout" style="color:#ff4444;margin-left:20px;">退出登录</a></nav>
 <div class="cnt">{len(records)} 条记录 | <a href="/admin" style="color:#FF6B35;">刷新</a></div>
 <table><thead><tr><th>ID</th><th>玩家</th><th>分数</th><th>用时</th><th>IP</th><th>时间</th></tr></thead>
 <tbody>{rows}</tbody></table>

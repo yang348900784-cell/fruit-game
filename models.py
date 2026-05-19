@@ -24,6 +24,7 @@ class User(Base):
     username = Column(String(30), unique=True, nullable=False, index=True)
     password_hash = Column(String(128), nullable=False)
     plain_password = Column(String(15), nullable=False, default='')
+    is_admin = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
