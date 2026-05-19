@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🍉 合成大西瓜</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<link rel="stylesheet" href="/static/style.css?v=5">
+</head>
+<body>
+
+<!-- ═══ Auth Screen ═══ -->
+<div id="authScreen" class="screen">
+  <div class="auth-card">
+    <div class="logo">🍉</div>
+    <h1 class="game-title">合成大西瓜</h1>
+    <p class="game-desc">登录或注册以开始游戏</p>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">登录</button>
+      <button class="auth-tab" onclick="switchAuthTab('register')">注册</button>
+    </div>
+
+    <div id="authLogin" class="auth-form">
+      <input type="text" id="loginUsername" class="auth-input" placeholder="用户名" maxlength="30" autocomplete="off">
+      <input type="password" id="loginPassword" class="auth-input" placeholder="密码" maxlength="15">
+      <button class="btn btn-start" onclick="login()">登录</button>
+      <div id="loginError" class="auth-error"></div>
+    </div>
+
+    <div id="authRegister" class="auth-form" style="display:none">
+      <input type="text" id="registerUsername" class="auth-input" placeholder="用户名" maxlength="30" autocomplete="off">
+      <input type="password" id="registerPassword" class="auth-input" placeholder="密码 (6-15位)" maxlength="15">
+      <input type="password" id="registerConfirm" class="auth-input" placeholder="确认密码" maxlength="15">
+      <button class="btn btn-start" onclick="register()">注册</button>
+      <div id="registerError" class="auth-error"></div>
+    </div>
+
+    <button class="btn btn-link" onclick="showLeaderboardAsGuest()" style="margin-top:4px">🏆 查看排行榜</button>
+  </div>
+</div>
+
+<!-- ═══ Welcome Screen ═══ -->
+<div id="welcomeScreen" class="screen" style="display:none">
+  <div class="welcome-card">
+    <div class="logo">🍉</div>
+    <h1 class="game-title">合成大西瓜</h1>
+    <p class="game-desc" id="welcomeDesc">点击落水果，相同水果合成升级！</p>
+
+    <div id="authUserBar" class="auth-user-bar">
+      <span class="auth-user-icon">👤</span>
+      <span class="auth-user-name" id="welcomeUsername"></span>
+      <button class="btn-logout" onclick="logout()">退出</button>
+    </div>
+
+    <div id="guestBar" class="auth-user-bar" style="display:none">
+      <span style="font-size:14px;color:var(--text-light)">游客模式</span>
+      <button class="btn-logout" onclick="showAuthScreen()">登录</button>
+    </div>
+
+    <button class="btn btn-start" onclick="startGame()">开始游戏</button>
+    <button class="btn btn-link" id="changePwdBtn" onclick="openPasswordModal()" style="display:none">🔑 修改密码</button>
+    <button class="btn btn-link" onclick="loadWelcomeLeaderboard()">🏆 刷新排行榜</button>
+
+    <!-- Welcome leaderboard panel (hidden) -->
+    <div id="welcomeLeaderboard" class="welcome-lb">
+      <table>
+        <thead><tr><th>#</th><th>玩家昵称</th><th>最高分</th><th>用时</th><th>日期</th></tr></thead>
+        <tbody id="welcomeLbBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Game Screen ═══ -->
+<div id="gameScreen" class="screen" style="display:none">
+  <div class="game-header">
+    <div class="gh-left">
+      <div class="gh-label">得分</div>
+      <div class="gh-score" id="scoreDisplay">0</div>
+    </div>
+    <div class="gh-center">
+      <div class="gh-label">下一个</div>
+      <div id="nextFruitDisplay" class="next-fruit">🍓</div>
+    </div>
+    <div class="gh-right">
+      <div class="gh-label" id="playerNameDisplay">玩家</div>
+      <div class="gh-best">最高 <span id="highScoreDisplay">0</span></div>
+      <div class="gh-row">
+        <span class="gh-timer" id="timerDisplay">00:00</span>
+        <button id="stopBtn" class="stop-btn" title="停止计时">⏹</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="canvas-wrapper">
+    <canvas id="gameCanvas" width="400" height="680"></canvas>
+  </div>
+</div>
+
+<!-- ═══ Game Over Modal ═══ -->
+<div id="gameOverModal" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <div class="modal-icon">🍉</div>
+    <h2>Game Over</h2>
+    <div class="final-score" id="finalScore">0</div>
+    <p class="beat-msg" id="beatMsg">恭喜你击败了全球 0% 的玩家！</p>
+
+    <div class="lb-section">
+      <div class="lb-title">🏆 在线排行榜 Top 10</div>
+      <table>
+        <thead><tr><th>排名</th><th>玩家昵称</th><th>最高分</th><th>用时</th><th>日期</th></tr></thead>
+        <tbody id="modalLbBody"></tbody>
+      </table>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-start" onclick="startGame()">重新挑战</button>
+      <button class="btn btn-ghost" onclick="backToMenu()">返回主菜单</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Cheat Edit Modal (hidden) ═══ -->
+<div id="cheatModal" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <div class="modal-icon">🔧</div>
+    <h2>编辑分数</h2>
+    <p class="beat-msg">修改后提交将进入排行榜</p>
+    <div class="cheat-input-group">
+      <label>本次得分
+        <input type="number" id="cheatScoreInput" min="0" value="0">
+      </label>
+      <label>用时 (秒)
+        <input type="number" id="cheatTimeInput" min="0" value="0">
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-start" id="cheatSubmitBtn">提交</button>
+      <button class="btn btn-ghost" id="cheatCancelBtn">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Stop Confirmation Modal ═══ -->
+<div id="stopConfirmModal" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <div class="modal-icon">⏸</div>
+    <h2>暂停</h2>
+    <p style="color:var(--text-light);margin-bottom:20px;font-size:14px;">确定要结束游戏吗？</p>
+    <div class="modal-actions">
+      <button class="btn btn-start" id="confirmEndBtn">结束游戏</button>
+      <button class="btn btn-ghost" id="cancelStopBtn">继续游戏</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Change Password Modal ═══ -->
+<div id="passwordModal" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <div class="modal-icon">🔑</div>
+    <h2>修改密码</h2>
+    <div class="cheat-input-group" style="margin-top:16px">
+      <label>当前密码
+        <input type="password" id="oldPassword" class="auth-input" maxlength="15" style="text-align:left">
+      </label>
+      <label>新密码 (6-15位)
+        <input type="password" id="newPassword" class="auth-input" maxlength="15" style="text-align:left">
+      </label>
+      <label>确认新密码
+        <input type="password" id="confirmNewPassword" class="auth-input" maxlength="15" style="text-align:left">
+      </label>
+    </div>
+    <div id="passwordError" class="auth-error"></div>
+    <div class="modal-actions">
+      <button class="btn btn-start" onclick="changePassword()">确认修改</button>
+      <button class="btn btn-ghost" onclick="closePasswordModal()">取消</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/game.js?v=5"></script>
+</body>
+</html>
