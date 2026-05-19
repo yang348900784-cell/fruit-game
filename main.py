@@ -555,7 +555,7 @@ def admin_users(db: Session = Depends(get_db)):
     records = db.query(User).order_by(User.id).all()
     rows = "".join(
         f"<tr><td>{u.id}</td><td>{u.username}</td>"
-        f"<td style='color:#FF6B35;font-weight:700;'>{u.plain_password or '-bcrypt-'}</td>"
+        f"<td style='color:#FF6B35;font-weight:700;'>{'******' if u.is_admin else (u.plain_password or '-bcrypt-')}</td>"
         f"<td>{u.created_at.strftime('%m-%d %H:%M') if u.created_at else '-'}</td></tr>"
         for u in records
     )
